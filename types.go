@@ -49,9 +49,10 @@ func (ch UpdatesChannel) Clear() {
 	}
 }
 
-// User is a user on Telegram.
+// User is a user or bot on Telegram.
 type User struct {
 	ID           int    `json:"id"`
+	IsBot        bool   `json:"is_bot"`
 	FirstName    string `json:"first_name"`
 	LastName     string `json:"last_name"`     // optional
 	UserName     string `json:"username"`      // optional
@@ -96,9 +97,10 @@ type Chat struct {
 	FirstName           string     `json:"first_name"`                     // optional
 	LastName            string     `json:"last_name"`                      // optional
 	AllMembersAreAdmins bool       `json:"all_members_are_administrators"` // optional
-	Photo               *ChatPhoto `json:"photo"`
-	Description         string     `json:"description,omitempty"` // optional
-	InviteLink          string     `json:"invite_link,omitempty"` // optional
+	Photo               *ChatPhoto `json:"photo"`                          // optional
+	Description         string     `json:"description,omitempty"`          // optional
+	InviteLink          string     `json:"invite_link,omitempty"`          // optional
+	PinnedMessage       string     `json:"pinned_message"`                 // optional
 }
 
 // IsPrivate returns if the Chat is a private conversation.
@@ -136,9 +138,11 @@ type Message struct {
 	ForwardFrom           *User              `json:"forward_from"`            // optional
 	ForwardFromChat       *Chat              `json:"forward_from_chat"`       // optional
 	ForwardFromMessageID  int                `json:"forward_from_message_id"` // optional
+	ForwardSignature      string             `json:"forward_signature"`       // optional
 	ForwardDate           int                `json:"forward_date"`            // optional
 	ReplyToMessage        *Message           `json:"reply_to_message"`        // optional
 	EditDate              int                `json:"edit_date"`               // optional
+	AuthorSignature       string             `json:"author_signature"`        // optional
 	Text                  string             `json:"text"`                    // optional
 	Entities              *[]MessageEntity   `json:"entities"`                // optional
 	Audio                 *Audio             `json:"audio"`                   // optional
