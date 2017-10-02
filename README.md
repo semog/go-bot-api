@@ -1,67 +1,106 @@
 # Golang bindings for the Telegram Bot API
 
-[![GoDoc](https://godoc.org/github.com/go-telegram-bot-api/telegram-bot-api?status.svg)](http://godoc.org/github.com/go-telegram-bot-api/telegram-bot-api)
-[![Travis](https://travis-ci.org/go-telegram-bot-api/telegram-bot-api.svg)](https://travis-ci.org/go-telegram-bot-api/telegram-bot-api)
+This package is a fork to add minimal new features, and to bring support for the
+latest Telegram Bot API. The original project was not being updated to the latest
+Telegram Bot API versions.
 
-All methods have been added, and all features should be available.
-If you want a feature that hasn't been added yet or something is broken,
-open an issue and I'll see what I can do.
+The scope of this project remains close to the original project, but adds
+a simple command dispatching model that makes it easy to get your bot up
+and running quickly without having to implement the same boilerplate code
+each time.
 
-All methods are fairly self explanatory, and reading the godoc page should
-explain everything. If something isn't clear, open an issue or submit
-a pull request.
+Use `github.com/semog/telegram-bot-api` for the latest version.
 
-The scope of this project is just to provide a wrapper around the API
-without any additional features. There are other projects for creating
-something with plugins and command handlers without having to design
-all that yourself.
-
-Use `github.com/go-telegram-bot-api/telegram-bot-api` for the latest
-version, or use `gopkg.in/telegram-bot-api.v4` for the stable build.
-
-Join [the development group](https://telegram.me/go_telegram_bot_api) if
-you want to ask questions or discuss development.
+Join [the original development group](https://t.me/go_telegram_bot_api) if
+you want to ask questions or discuss development. Remember that this is a branch
+from the original development version.
 
 ## Example
 
-This is a very simple bot that just displays any gotten updates,
-then replies it to that chat.
+This sample shows a main() function that connects to the bot,
+and then starts the command listener loop. This is all that is required in the
+main() function. The RunBot() function will handle running your bot and dispatch
+messages via the event handlers. It will call the OnInitialize
+handler once upon startup. It will call the OnDispose handler once on shutdown.
+It will then call the OnMessage handler whenever a new message
+is received. The OnMessage handler should parse out any command messages that
+the bot has registered.
 
 ```go
 package main
 
 import (
 	"log"
-	"gopkg.in/telegram-bot-api.v4"
+	"regexp"
+
+	tg "github.com/semog/telegram-bot-api"
 )
 
 func main() {
-	bot, err := tgbotapi.NewBotAPI("MyAwesomeBotToken")
+	bot, err := tg.NewBotAPI("MyAwesomeBotToken")
 	if err != nil {
 		log.Panic(err)
 	}
 
-	bot.Debug = true
+	log.Printf("Connected to Bot: %s (%s)", bot.Self.FirstName, bot.Self.UserName)
+	tg.RunBot(bot, mybothandlers)
+}
 
-	log.Printf("Authorized on account %s", bot.Self.UserName)
+// ------------ The following can be placed into a separate source file -----------------
+// mybothandlers maps the dispatch function handlers.
+var mybothandlers = tg.BotEventHandlers{
+	OnInitialize: mybotOnInitialize,
+	OnDispose:    mybotOnDispose,
+	OnMessage:    mybotOnMessage,
+}
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
+var actionCmd,
+	quitCmd *regexp.Regexp
+var basicCmd = regexp.MustCompile(`(?i)^/`)
 
-	updates, err := bot.GetUpdatesChan(u)
+// Initialize global data, and the bot commands with optional botname attached.
+func mybotOnInitialize(bot *tg.BotAPI) bool {
+	botname := bot.Self.UserName
+	actionCmd = regexp.MustCompile(fmt.Sprintf(`(?i)^/?action(@%s)?`, botname))
+	quitCmd = regexp.MustCompile(fmt.Sprintf(`(?i)^/?quit(@%s)?`, botname))
+	return true
+}
 
-	for update := range updates {
-		if update.Message == nil {
-			continue
-		}
+func mybotOnDispose(bot *tg.BotAPI) {
+	// Do any cleanup of external resources.
+}
 
-		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
-
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-		msg.ReplyToMessageID = update.Message.MessageID
-
-		bot.Send(msg)
+// mybotOnMessage is the main handler that receives text messages
+// from the users. Parse the text to look for bot commands.
+func mybotOnMessage(bot *tg.BotAPI, msg *tg.Message) bool {
+	log.Printf("MsgFrom: User %s %s (%s): %s",
+		msg.From.FirstName, msg.From.LastName, msg.From.UserName, msg.Text)
+	switch {
+	case !basicCmd.MatchString(msg.Text) && len(msg.Text) > 0:
+		// This is a non-command message sent to the bot.
+		doTextReply(bot, msg)
+	case actionCmd.MatchString(msg.Text):
+		doAction(bot, msg)
+	case quitCmd.MatchString(msg.Text):
+		doQuit(bot, msg)
+		return false
 	}
+	return true
+}
+
+func doTextReply(bot *tg.BotAPI, msg *tg.Message) {
+	log.Printf("[%s] %s", msg.From.UserName, msg.Text)
+	replymsg := tgbotapi.NewMessage(msg.Chat.ID, msg.Text)
+	replymsg.ReplyToMessageID = msg.MessageID
+	bot.Send(replymsg)
+}
+
+func doAction(bot *tg.BotAPI, msg *tg.Message) {
+	// Do /action command
+}
+
+func doQuit(bot *tg.BotAPI, msg *tg.Message) {
+	// Do /quit action
 }
 ```
 
