@@ -188,6 +188,12 @@ func (edit BaseEdit) values() (url.Values, error) {
 	return v, nil
 }
 
+// ParseModeMarkdown - Set the parse_mode of a message for markdown formatting options.
+const ParseModeMarkdown = "Markdown"
+
+// ParseModeHTML - Set the parse_mode of a message for HTML formatting options.
+const ParseModeHTML = "HTML"
+
 // MessageConfig contains information about a SendMessage request.
 type MessageConfig struct {
 	BaseChat
@@ -1038,8 +1044,8 @@ func (config DeleteMessageConfig) values() (url.Values, error) {
 
 // PinChatMessageConfig contains information of a message in a chat to pin.
 type PinChatMessageConfig struct {
-	ChatID int64
-	MessageID int
+	ChatID              int64
+	MessageID           int
 	DisableNotification bool
 }
 
