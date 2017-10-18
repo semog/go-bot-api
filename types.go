@@ -191,8 +191,7 @@ func (m *Message) Command() string {
 		return ""
 	}
 
-	command := strings.SplitN(m.Text, " ", 2)[0][1:]
-
+	command := strings.FieldsFunc(m.Text, spaceSep)[0][1:]
 	if i := strings.Index(command, "@"); i != -1 {
 		command = command[:i]
 	}
@@ -208,12 +207,12 @@ func (m *Message) CommandArguments() string {
 		return ""
 	}
 
-	split := strings.SplitN(m.Text, " ", 2)
-	if len(split) != 2 {
-		return ""
-	}
+	index := strings.IndexFunc(m.Text, spaceSep)
+	return m.Text[index+1:]
+}
 
-	return split[1]
+func spaceSep(r rune) bool {
+	return r == ' ' || r == '　'
 }
 
 // MessageEntity contains information about data in a Message.
