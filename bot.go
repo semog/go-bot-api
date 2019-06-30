@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -25,8 +25,11 @@ type BotAPI struct {
 	Debug  bool   `json:"debug"`
 	Buffer int    `json:"buffer"`
 
-	Self   User         `json:"-"`
-	Client *http.Client `json:"-"`
+	Self            User         `json:"-"`
+	Client          *http.Client `json:"-"`
+	shutdownChannel chan interface{}
+
+	apiEndpoint string
 }
 
 // NewBotAPI creates a new BotAPI instance.
@@ -42,9 +45,12 @@ func NewBotAPI(token string) (*BotAPI, error) {
 // It requires a token, provided by @BotFather on Telegram.
 func NewBotAPIWithClient(token string, client *http.Client) (*BotAPI, error) {
 	bot := &BotAPI{
-		Token:  token,
-		Client: client,
-		Buffer: 100,
+		Token:           token,
+		Client:          client,
+		Buffer:          100,
+		shutdownChannel: make(chan interface{}),
+
+		apiEndpoint: APIEndpoint,
 	}
 
 	self, err := bot.GetMe()
@@ -53,13 +59,16 @@ func NewBotAPIWithClient(token string, client *http.Client) (*BotAPI, error) {
 	}
 
 	bot.Self = self
-
 	return bot, nil
+}
+
+func (b *BotAPI) SetAPIEndpoint(apiEndpoint string) {
+	b.apiEndpoint = apiEndpoint
 }
 
 // MakeRequest makes a request to a specific endpoint with our token.
 func (bot *BotAPI) MakeRequest(endpoint string, params url.Values) (APIResponse, error) {
-	method := fmt.Sprintf(APIEndpoint, bot.Token, endpoint)
+	method := fmt.Sprintf(bot.apiEndpoint, bot.Token, endpoint)
 
 	resp, err := bot.Client.PostForm(method, params)
 	if err != nil {
@@ -67,31 +76,49 @@ func (bot *BotAPI) MakeRequest(endpoint string, params url.Values) (APIResponse,
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusForbidden {
-		return APIResponse{}, errors.New(ErrAPIForbidden)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return APIResponse{}, errors.New(http.StatusText(resp.StatusCode))
-	}
-
-	bytes, err := ioutil.ReadAll(resp.Body)
+	var apiResp APIResponse
+	bytes, err := bot.decodeAPIResponse(resp.Body, &apiResp)
 	if err != nil {
-		return APIResponse{}, err
+		return apiResp, err
 	}
 
 	if bot.Debug {
-		log.Println(endpoint, string(bytes))
+		log.Printf("%s resp: %s", endpoint, bytes)
 	}
 
-	var apiResp APIResponse
-	json.Unmarshal(bytes, &apiResp)
-
 	if !apiResp.Ok {
-		return apiResp, errors.New(apiResp.Description)
+		parameters := ResponseParameters{}
+		if apiResp.Parameters != nil {
+			parameters = *apiResp.Parameters
+		}
+		return apiResp, Error{Code: apiResp.ErrorCode, Message: apiResp.Description, ResponseParameters: parameters}
 	}
 
 	return apiResp, nil
+}
+
+// decodeAPIResponse decode response and return slice of bytes if debug enabled.
+// If debug disabled, just decode http.Response.Body stream to APIResponse struct
+// for efficient memory usage
+func (bot *BotAPI) decodeAPIResponse(responseBody io.Reader, resp *APIResponse) (_ []byte, err error) {
+	if !bot.Debug {
+		dec := json.NewDecoder(responseBody)
+		err = dec.Decode(resp)
+		return
+	}
+
+	// if debug, read reponse body
+	data, err := ioutil.ReadAll(responseBody)
+	if err != nil {
+		return
+	}
+
+	err = json.Unmarshal(data, resp)
+	if err != nil {
+		return
+	}
+
+	return data, nil
 }
 
 // makeMessageRequest makes a request to a method that returns a Message.
@@ -105,7 +132,6 @@ func (bot *BotAPI) makeMessageRequest(endpoint string, params url.Values) (Messa
 	json.Unmarshal(resp.Result, &message)
 
 	bot.debugLog(endpoint, params, message)
-
 	return message, nil
 }
 
@@ -166,7 +192,7 @@ func (bot *BotAPI) UploadFile(endpoint string, params map[string]string, fieldna
 		return APIResponse{}, errors.New(ErrBadFileType)
 	}
 
-	method := fmt.Sprintf(APIEndpoint, bot.Token, endpoint)
+	method := fmt.Sprintf(bot.apiEndpoint, bot.Token, endpoint)
 
 	req, err := http.NewRequest("POST", method, nil)
 	if err != nil {
@@ -232,7 +258,6 @@ func (bot *BotAPI) GetMe() (User, error) {
 	json.Unmarshal(resp.Result, &user)
 
 	bot.debugLog("getMe", nil, user)
-
 	return user, nil
 }
 
@@ -352,7 +377,6 @@ func (bot *BotAPI) GetUserProfilePhotos(config UserProfilePhotosConfig) (UserPro
 	json.Unmarshal(resp.Result, &profilePhotos)
 
 	bot.debugLog("GetUserProfilePhoto", v, profilePhotos)
-
 	return profilePhotos, nil
 }
 
@@ -372,7 +396,6 @@ func (bot *BotAPI) GetFile(config FileConfig) (File, error) {
 	json.Unmarshal(resp.Result, &file)
 
 	bot.debugLog("GetFile", v, file)
-
 	return file, nil
 }
 
@@ -404,7 +427,6 @@ func (bot *BotAPI) GetUpdates(config UpdateConfig) ([]Update, error) {
 	json.Unmarshal(resp.Result, &updates)
 
 	bot.debugLog("getUpdates", v, updates)
-
 	return updates, nil
 }
 
@@ -465,6 +487,12 @@ func (bot *BotAPI) GetUpdatesChan(config UpdateConfig) (UpdatesChannel, error) {
 
 	go func() {
 		for {
+			select {
+			case <-bot.shutdownChannel:
+				return
+			default:
+			}
+
 			updates, err := bot.GetUpdates(config)
 			if err != nil {
 				log.Println(err)
@@ -486,12 +514,21 @@ func (bot *BotAPI) GetUpdatesChan(config UpdateConfig) (UpdatesChannel, error) {
 	return ch, nil
 }
 
+// StopReceivingUpdates stops the go routine which receives updates
+func (bot *BotAPI) StopReceivingUpdates() {
+	if bot.Debug {
+		log.Println("Stopping the update receiver routine...")
+	}
+	close(bot.shutdownChannel)
+}
+
 // ListenForWebhook registers a http handler for a webhook.
 func (bot *BotAPI) ListenForWebhook(pattern string) UpdatesChannel {
 	ch := make(chan Update, bot.Buffer)
 
 	http.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 		bytes, _ := ioutil.ReadAll(r.Body)
+		r.Body.Close()
 
 		var update Update
 		json.Unmarshal(bytes, &update)
@@ -521,7 +558,6 @@ func (bot *BotAPI) AnswerInlineQuery(config InlineConfig) (APIResponse, error) {
 	v.Add("switch_pm_parameter", config.SwitchPMParameter)
 
 	bot.debugLog("answerInlineQuery", v, nil)
-
 	return bot.MakeRequest("answerInlineQuery", v)
 }
 
@@ -540,7 +576,6 @@ func (bot *BotAPI) AnswerCallbackQuery(config CallbackConfig) (APIResponse, erro
 	v.Add("cache_time", strconv.Itoa(config.CacheTime))
 
 	bot.debugLog("answerCallbackQuery", v, nil)
-
 	return bot.MakeRequest("answerCallbackQuery", v)
 }
 
@@ -562,7 +597,6 @@ func (bot *BotAPI) KickChatMember(config KickChatMemberConfig) (APIResponse, err
 	}
 
 	bot.debugLog("kickChatMember", v, nil)
-
 	return bot.MakeRequest("kickChatMember", v)
 }
 
@@ -577,7 +611,6 @@ func (bot *BotAPI) LeaveChat(config ChatConfig) (APIResponse, error) {
 	}
 
 	bot.debugLog("leaveChat", v, nil)
-
 	return bot.MakeRequest("leaveChat", v)
 }
 
@@ -600,7 +633,6 @@ func (bot *BotAPI) GetChat(config ChatConfig) (Chat, error) {
 	err = json.Unmarshal(resp.Result, &chat)
 
 	bot.debugLog("getChat", v, chat)
-
 	return chat, err
 }
 
@@ -626,7 +658,6 @@ func (bot *BotAPI) GetChatAdministrators(config ChatConfig) ([]ChatMember, error
 	err = json.Unmarshal(resp.Result, &members)
 
 	bot.debugLog("getChatAdministrators", v, members)
-
 	return members, err
 }
 
@@ -649,7 +680,6 @@ func (bot *BotAPI) GetChatMembersCount(config ChatConfig) (int, error) {
 	err = json.Unmarshal(resp.Result, &count)
 
 	bot.debugLog("getChatMembersCount", v, count)
-
 	return count, err
 }
 
@@ -673,7 +703,6 @@ func (bot *BotAPI) GetChatMember(config ChatConfigWithUser) (ChatMember, error) 
 	err = json.Unmarshal(resp.Result, &member)
 
 	bot.debugLog("getChatMember", v, member)
-
 	return member, err
 }
 
@@ -692,7 +721,6 @@ func (bot *BotAPI) UnbanChatMember(config ChatMemberConfig) (APIResponse, error)
 	v.Add("user_id", strconv.Itoa(config.UserID))
 
 	bot.debugLog("unbanChatMember", v, nil)
-
 	return bot.MakeRequest("unbanChatMember", v)
 }
 
@@ -712,24 +740,29 @@ func (bot *BotAPI) RestrictChatMember(config RestrictChatMemberConfig) (APIRespo
 	}
 	v.Add("user_id", strconv.Itoa(config.UserID))
 
-	if &config.CanSendMessages != nil {
+	if config.CanSendMessages != nil {
 		v.Add("can_send_messages", strconv.FormatBool(*config.CanSendMessages))
 	}
-	if &config.CanSendMediaMessages != nil {
+	if config.CanSendMediaMessages != nil {
 		v.Add("can_send_media_messages", strconv.FormatBool(*config.CanSendMediaMessages))
 	}
-	if &config.CanSendOtherMessages != nil {
+	if config.CanSendOtherMessages != nil {
 		v.Add("can_send_other_messages", strconv.FormatBool(*config.CanSendOtherMessages))
 	}
-	if &config.CanAddWebPagePreviews != nil {
+	if config.CanAddWebPagePreviews != nil {
 		v.Add("can_add_web_page_previews", strconv.FormatBool(*config.CanAddWebPagePreviews))
+	}
+	if config.UntilDate != 0 {
+		v.Add("until_date", strconv.FormatInt(config.UntilDate, 10))
 	}
 
 	bot.debugLog("restrictChatMember", v, nil)
-
 	return bot.MakeRequest("restrictChatMember", v)
 }
 
+// PromoteChatMember will promote or demote a user in a supergroup or a channel.
+// The bot must be an administrator in the chat for this to work and must have the appropriate admin rights.
+// Pass False for all boolean parameters to demote a user. Returns True on success.
 func (bot *BotAPI) PromoteChatMember(config PromoteChatMemberConfig) (APIResponse, error) {
 	v := url.Values{}
 
@@ -742,33 +775,32 @@ func (bot *BotAPI) PromoteChatMember(config PromoteChatMemberConfig) (APIRespons
 	}
 	v.Add("user_id", strconv.Itoa(config.UserID))
 
-	if &config.CanChangeInfo != nil {
+	if config.CanChangeInfo != nil {
 		v.Add("can_change_info", strconv.FormatBool(*config.CanChangeInfo))
 	}
-	if &config.CanPostMessages != nil {
+	if config.CanPostMessages != nil {
 		v.Add("can_post_messages", strconv.FormatBool(*config.CanPostMessages))
 	}
-	if &config.CanEditMessages != nil {
+	if config.CanEditMessages != nil {
 		v.Add("can_edit_messages", strconv.FormatBool(*config.CanEditMessages))
 	}
-	if &config.CanDeleteMessages != nil {
+	if config.CanDeleteMessages != nil {
 		v.Add("can_delete_messages", strconv.FormatBool(*config.CanDeleteMessages))
 	}
-	if &config.CanInviteUsers != nil {
+	if config.CanInviteUsers != nil {
 		v.Add("can_invite_users", strconv.FormatBool(*config.CanInviteUsers))
 	}
-	if &config.CanRestrictMembers != nil {
+	if config.CanRestrictMembers != nil {
 		v.Add("can_restrict_members", strconv.FormatBool(*config.CanRestrictMembers))
 	}
-	if &config.CanPinMessages != nil {
+	if config.CanPinMessages != nil {
 		v.Add("can_pin_messages", strconv.FormatBool(*config.CanPinMessages))
 	}
-	if &config.CanPromoteMembers != nil {
+	if config.CanPromoteMembers != nil {
 		v.Add("can_promote_members", strconv.FormatBool(*config.CanPromoteMembers))
 	}
 
 	bot.debugLog("promoteChatMember", v, nil)
-
 	return bot.MakeRequest("promoteChatMember", v)
 }
 
@@ -804,7 +836,6 @@ func (bot *BotAPI) AnswerShippingQuery(config ShippingConfig) (APIResponse, erro
 	}
 
 	bot.debugLog("answerShippingQuery", v, nil)
-
 	return bot.MakeRequest("answerShippingQuery", v)
 }
 
@@ -819,7 +850,6 @@ func (bot *BotAPI) AnswerPreCheckoutQuery(config PreCheckoutConfig) (APIResponse
 	}
 
 	bot.debugLog("answerPreCheckoutQuery", v, nil)
-
 	return bot.MakeRequest("answerPreCheckoutQuery", v)
 }
 
@@ -831,7 +861,6 @@ func (bot *BotAPI) DeleteMessage(config DeleteMessageConfig) (APIResponse, error
 	}
 
 	bot.debugLog(config.method(), v, nil)
-
 	return bot.MakeRequest(config.method(), v)
 }
 
@@ -846,6 +875,9 @@ func (bot *BotAPI) GetInviteLink(config ChatConfig) (string, error) {
 	}
 
 	resp, err := bot.MakeRequest("exportChatInviteLink", v)
+	if err != nil {
+		return "", err
+	}
 
 	var inviteLink string
 	err = json.Unmarshal(resp.Result, &inviteLink)
@@ -853,8 +885,30 @@ func (bot *BotAPI) GetInviteLink(config ChatConfig) (string, error) {
 	return inviteLink, err
 }
 
-// Pin message in supergroup
+// PinChatMessage pin message in supergroup
 func (bot *BotAPI) PinChatMessage(config PinChatMessageConfig) (APIResponse, error) {
+	v, err := config.values()
+	if err != nil {
+		return APIResponse{}, err
+	}
+
+	bot.debugLog(config.method(), v, nil)
+	return bot.MakeRequest(config.method(), v)
+}
+
+// UnpinChatMessage unpin message in supergroup
+func (bot *BotAPI) UnpinChatMessage(config UnpinChatMessageConfig) (APIResponse, error) {
+	v, err := config.values()
+	if err != nil {
+		return APIResponse{}, err
+	}
+
+	bot.debugLog(config.method(), v, nil)
+	return bot.MakeRequest(config.method(), v)
+}
+
+// SetChatTitle change title of chat.
+func (bot *BotAPI) SetChatTitle(config SetChatTitleConfig) (APIResponse, error) {
 	v, err := config.values()
 	if err != nil {
 		return APIResponse{}, err
@@ -865,8 +919,8 @@ func (bot *BotAPI) PinChatMessage(config PinChatMessageConfig) (APIResponse, err
 	return bot.MakeRequest(config.method(), v)
 }
 
-// Unpin message in supergroup
-func (bot *BotAPI) UnpinChatMessage(config UnpinChatMessageConfig) (APIResponse, error) {
+// SetChatDescription change description of chat.
+func (bot *BotAPI) SetChatDescription(config SetChatDescriptionConfig) (APIResponse, error) {
 	v, err := config.values()
 	if err != nil {
 		return APIResponse{}, err
@@ -875,4 +929,55 @@ func (bot *BotAPI) UnpinChatMessage(config UnpinChatMessageConfig) (APIResponse,
 	bot.debugLog(config.method(), v, nil)
 
 	return bot.MakeRequest(config.method(), v)
+}
+
+// SetChatPhoto change photo of chat.
+func (bot *BotAPI) SetChatPhoto(config SetChatPhotoConfig) (APIResponse, error) {
+	params, err := config.params()
+	if err != nil {
+		return APIResponse{}, err
+	}
+
+	file := config.getFile()
+
+	return bot.UploadFile(config.method(), params, config.name(), file)
+}
+
+// DeleteChatPhoto delete photo of chat.
+func (bot *BotAPI) DeleteChatPhoto(config DeleteChatPhotoConfig) (APIResponse, error) {
+	v, err := config.values()
+	if err != nil {
+		return APIResponse{}, err
+	}
+
+	bot.debugLog(config.method(), v, nil)
+
+	return bot.MakeRequest(config.method(), v)
+}
+
+// TODO - New Bot 3.2 APIs
+// [+] getStickerSet
+// [ ] uploadStickerFile
+// [ ] createNewStickerSet
+// [ ] addStickerToSet
+// [ ] setStickerPositionInSet
+// [ ] deleteStickerFromSet.
+
+// GetStickerSet get a sticker set. On success, a StickerSet object is returned.
+func (bot *BotAPI) GetStickerSet(config GetStickerSetConfig) (StickerSet, error) {
+	v, err := config.values()
+	if err != nil {
+		return StickerSet{}, err
+	}
+
+	bot.debugLog(config.method(), v, nil)
+	resp, err := bot.MakeRequest(config.method(), v)
+	if err != nil {
+		return StickerSet{}, err
+	}
+
+	var stickerset StickerSet
+	err = json.Unmarshal(resp.Result, &stickerset)
+
+	return stickerset, err
 }

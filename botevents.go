@@ -1,9 +1,5 @@
 package tgbotapi
 
-import (
-	"log"
-)
-
 // BotInitializeEvent called once before any other events so the bot can initialize
 // any state configurations before it starts running.
 type BotInitializeEvent func(bot *BotAPI) bool
@@ -17,6 +13,9 @@ type BotUpdateEvent func(bot *BotAPI, msg *Update) bool
 
 // BotMessageEvent called when the bot receives a Message update.
 type BotMessageEvent func(bot *BotAPI, msg *Message) bool
+
+// BotCommandEvent called when the bot receives a Command.
+type BotCommandEvent func(bot *BotAPI, cmd string, msg *Message) bool
 
 // BotInlineQueryEvent called when the bot receives an InlineQuery update.
 type BotInlineQueryEvent func(bot *BotAPI, query *InlineQuery) bool
@@ -38,6 +37,7 @@ type BotEventHandlers struct {
 	OnInitialize         BotInitializeEvent
 	OnDispose            BotDisposeEvent
 	OnUpdate             BotUpdateEvent
+	OnCommand            BotCommandEvent
 	OnMessage            BotMessageEvent
 	OnEditedMessage      BotMessageEvent
 	OnChannelPost        BotMessageEvent
@@ -77,6 +77,8 @@ func RunBot(bot *BotAPI, handler BotEventHandlers) {
 
 		// Call specific event handlers
 		switch {
+		case update.Message != nil && update.Message.IsCommand() && handler.OnCommand != nil:
+			keepgoing = handler.OnCommand(bot, update.Message.Command(), update.Message)
 		case update.Message != nil && handler.OnMessage != nil:
 			keepgoing = handler.OnMessage(bot, update.Message)
 		case update.EditedMessage != nil && handler.OnEditedMessage != nil:

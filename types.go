@@ -52,11 +52,11 @@ func (ch UpdatesChannel) Clear() {
 // User is a user or bot on Telegram.
 type User struct {
 	ID           int    `json:"id"`
-	IsBot        bool   `json:"is_bot"`
 	FirstName    string `json:"first_name"`
 	LastName     string `json:"last_name"`     // optional
 	UserName     string `json:"username"`      // optional
 	LanguageCode string `json:"language_code"` // optional
+	IsBot        bool   `json:"is_bot"`        // optional
 }
 
 // String displays a simple text version of a user.
@@ -73,6 +73,18 @@ func (u *User) String() string {
 		name += " " + u.LastName
 	}
 
+	return name
+}
+
+// FullName displays a fully formatted first and last name and username.
+func (u *User) FullName() string {
+	name := u.FirstName
+	if len(u.LastName) > 0 {
+		name += " " + u.LastName
+	}
+	if len(u.UserName) > 0 {
+		name += " (" + u.UserName + ")"
+	}
 	return name
 }
 
@@ -97,10 +109,10 @@ type Chat struct {
 	FirstName           string     `json:"first_name"`                     // optional
 	LastName            string     `json:"last_name"`                      // optional
 	AllMembersAreAdmins bool       `json:"all_members_are_administrators"` // optional
-	Photo               *ChatPhoto `json:"photo"`                          // optional
-	Description         string     `json:"description,omitempty"`          // optional
-	InviteLink          string     `json:"invite_link,omitempty"`          // optional
-	PinnedMessage       string     `json:"pinned_message"`                 // optional
+	Photo               *ChatPhoto `json:"photo"`
+	Description         string     `json:"description,omitempty"` // optional
+	InviteLink          string     `json:"invite_link,omitempty"` // optional
+	PinnedMessage       *Message   `json:"pinned_message"`        // optional
 }
 
 // IsPrivate returns if the Chat is a private conversation.
@@ -138,15 +150,15 @@ type Message struct {
 	ForwardFrom           *User              `json:"forward_from"`            // optional
 	ForwardFromChat       *Chat              `json:"forward_from_chat"`       // optional
 	ForwardFromMessageID  int                `json:"forward_from_message_id"` // optional
-	ForwardSignature      string             `json:"forward_signature"`       // optional
 	ForwardDate           int                `json:"forward_date"`            // optional
 	ReplyToMessage        *Message           `json:"reply_to_message"`        // optional
 	EditDate              int                `json:"edit_date"`               // optional
-	AuthorSignature       string             `json:"author_signature"`        // optional
 	Text                  string             `json:"text"`                    // optional
 	Entities              *[]MessageEntity   `json:"entities"`                // optional
+	CaptionEntities       *[]MessageEntity   `json:"caption_entities"`        // optional
 	Audio                 *Audio             `json:"audio"`                   // optional
 	Document              *Document          `json:"document"`                // optional
+	Animation             *ChatAnimation     `json:"animation"`               // optional
 	Game                  *Game              `json:"game"`                    // optional
 	Photo                 *[]PhotoSize       `json:"photo"`                   // optional
 	Sticker               *Sticker           `json:"sticker"`                 // optional
@@ -170,6 +182,7 @@ type Message struct {
 	PinnedMessage         *Message           `json:"pinned_message"`          // optional
 	Invoice               *Invoice           `json:"invoice"`                 // optional
 	SuccessfulPayment     *SuccessfulPayment `json:"successful_payment"`      // optional
+	PassportData          *PassportData      `json:"passport_data,omitempty"` // optional
 }
 
 // Time converts the message timestamp into a Time.
@@ -177,21 +190,24 @@ func (m *Message) Time() time.Time {
 	return time.Unix(int64(m.Date), 0)
 }
 
-// IsCommand returns true if message starts with '/'.
+// IsCommand returns true if message starts with a "bot_command" entity.
 func (m *Message) IsCommand() bool {
-	return m.Text != "" && m.Text[0] == '/'
+	if m.Entities == nil || len(*m.Entities) == 0 {
+		return false
+	}
+
+	entity := (*m.Entities)[0]
+	return entity.Offset == 0 && entity.IsCommand()
 }
 
 // Command checks if the message was a command and if it was, returns the
 // command. If the Message was not a command, it returns an empty string.
 //
-// If the command contains the at bot syntax, it removes the bot name.
+// If the command contains the at name syntax, it is removed. Use
+// CommandWithAt() if you do not want that.
 func (m *Message) Command() string {
-	if !m.IsCommand() {
-		return ""
-	}
+	command := m.CommandWithAt()
 
-	command := strings.FieldsFunc(m.Text, spaceSep)[0][1:]
 	if i := strings.Index(command, "@"); i != -1 {
 		command = command[:i]
 	}
@@ -199,20 +215,42 @@ func (m *Message) Command() string {
 	return command
 }
 
+// CommandWithAt checks if the message was a command and if it was, returns the
+// command. If the Message was not a command, it returns an empty string.
+//
+// If the command contains the at name syntax, it is not removed. Use Command()
+// if you want that.
+func (m *Message) CommandWithAt() string {
+	if !m.IsCommand() {
+		return ""
+	}
+
+	// IsCommand() checks that the message begins with a bot_command entity
+	entity := (*m.Entities)[0]
+	return m.Text[1:entity.Length]
+}
+
 // CommandArguments checks if the message was a command and if it was,
 // returns all text after the command name. If the Message was not a
 // command, it returns an empty string.
+//
+// Note: The first character after the command name is omitted:
+// - "/foo bar baz" yields "bar baz", not " bar baz"
+// - "/foo-bar baz" yields "bar baz", too
+// Even though the latter is not a command conforming to the spec, the API
+// marks "/foo" as command entity.
 func (m *Message) CommandArguments() string {
 	if !m.IsCommand() {
 		return ""
 	}
 
-	index := strings.IndexFunc(m.Text, spaceSep)
-	return m.Text[index+1:]
-}
+	// IsCommand() checks that the message begins with a bot_command entity
+	entity := (*m.Entities)[0]
+	if len(m.Text) == entity.Length {
+		return "" // The command makes up the whole message
+	}
 
-func spaceSep(r rune) bool {
-	return r == ' ' || r == '　'
+	return m.Text[entity.Length+1:]
 }
 
 // MessageEntity contains information about data in a Message.
@@ -225,12 +263,62 @@ type MessageEntity struct {
 }
 
 // ParseURL attempts to parse a URL contained within a MessageEntity.
-func (entity MessageEntity) ParseURL() (*url.URL, error) {
-	if entity.URL == "" {
+func (e MessageEntity) ParseURL() (*url.URL, error) {
+	if e.URL == "" {
 		return nil, errors.New(ErrBadURL)
 	}
 
-	return url.Parse(entity.URL)
+	return url.Parse(e.URL)
+}
+
+// IsMention returns true if the type of the message entity is "mention" (@username).
+func (e MessageEntity) IsMention() bool {
+	return e.Type == "mention"
+}
+
+// IsHashtag returns true if the type of the message entity is "hashtag".
+func (e MessageEntity) IsHashtag() bool {
+	return e.Type == "hashtag"
+}
+
+// IsCommand returns true if the type of the message entity is "bot_command".
+func (e MessageEntity) IsCommand() bool {
+	return e.Type == "bot_command"
+}
+
+// IsUrl returns true if the type of the message entity is "url".
+func (e MessageEntity) IsUrl() bool {
+	return e.Type == "url"
+}
+
+// IsEmail returns true if the type of the message entity is "email".
+func (e MessageEntity) IsEmail() bool {
+	return e.Type == "email"
+}
+
+// IsBold returns true if the type of the message entity is "bold" (bold text).
+func (e MessageEntity) IsBold() bool {
+	return e.Type == "bold"
+}
+
+// IsItalic returns true if the type of the message entity is "italic" (italic text).
+func (e MessageEntity) IsItalic() bool {
+	return e.Type == "italic"
+}
+
+// IsCode returns true if the type of the message entity is "code" (monowidth string).
+func (e MessageEntity) IsCode() bool {
+	return e.Type == "code"
+}
+
+// IsPre returns true if the type of the message entity is "pre" (monowidth block).
+func (e MessageEntity) IsPre() bool {
+	return e.Type == "pre"
+}
+
+// IsTextLink returns true if the type of the message entity is "text_link" (clickable text URL).
+func (e MessageEntity) IsTextLink() bool {
+	return e.Type == "text_link"
 }
 
 // PhotoSize contains information about photos.
@@ -268,6 +356,27 @@ type Sticker struct {
 	Thumbnail *PhotoSize `json:"thumb"`     // optional
 	Emoji     string     `json:"emoji"`     // optional
 	FileSize  int        `json:"file_size"` // optional
+	SetName   string     `json:"set_name"`  // optional
+}
+
+// ChatAnimation contains information about an animation.
+type ChatAnimation struct {
+	FileID    string     `json:"file_id"`
+	Width     int        `json:"width"`
+	Height    int        `json:"height"`
+	Duration  int        `json:"duration"`
+	Thumbnail *PhotoSize `json:"thumb"`     // optional
+	FileName  string     `json:"file_name"` // optional
+	MimeType  string     `json:"mime_type"` // optional
+	FileSize  int        `json:"file_size"` // optional
+}
+
+// StickerSet represents a sticker set.
+type StickerSet struct {
+	Name          string `json:"name"`
+	Title         string `json:"title"`
+	ContainsMasks bool   `json:"contains_masks"`
+	Stickers      []Sticker
 }
 
 // Video contains information about a video.
@@ -488,6 +597,27 @@ func (info WebhookInfo) IsSet() bool {
 	return info.URL != ""
 }
 
+// InputMediaPhoto contains a photo for displaying as part of a media group.
+type InputMediaPhoto struct {
+	Type      string `json:"type"`
+	Media     string `json:"media"`
+	Caption   string `json:"caption"`
+	ParseMode string `json:"parse_mode"`
+}
+
+// InputMediaVideo contains a video for displaying as part of a media group.
+type InputMediaVideo struct {
+	Type  string `json:"type"`
+	Media string `json:"media"`
+	// thumb intentionally missing as it is not currently compatible
+	Caption           string `json:"caption"`
+	ParseMode         string `json:"parse_mode"`
+	Width             int    `json:"width"`
+	Height            int    `json:"height"`
+	Duration          int    `json:"duration"`
+	SupportsStreaming bool   `json:"supports_streaming"`
+}
+
 // InlineQuery is a Query from Telegram for an inline request.
 type InlineQuery struct {
 	ID       string    `json:"id"`
@@ -528,17 +658,42 @@ type InlineQueryResultPhoto struct {
 	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
 }
 
+// InlineQueryResultCachedPhoto is an inline query response with cached photo.
+type InlineQueryResultCachedPhoto struct {
+	Type                string                `json:"type"`          // required
+	ID                  string                `json:"id"`            // required
+	PhotoID             string                `json:"photo_file_id"` // required
+	Title               string                `json:"title"`
+	Description         string                `json:"description"`
+	Caption             string                `json:"caption"`
+	ParseMode           string                `json:"parse_mode"`
+	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
+}
+
 // InlineQueryResultGIF is an inline query response GIF.
 type InlineQueryResultGIF struct {
-	Type                string                `json:"type"`    // required
-	ID                  string                `json:"id"`      // required
-	URL                 string                `json:"gif_url"` // required
-	Width               int                   `json:"gif_width"`
-	Height              int                   `json:"gif_height"`
-	Duration            int                   `json:"gif_duration"`
-	ThumbURL            string                `json:"thumb_url"`
+	Type                string                `json:"type"`      // required
+	ID                  string                `json:"id"`        // required
+	URL                 string                `json:"gif_url"`   // required
+	ThumbURL            string                `json:"thumb_url"` // required
+	Width               int                   `json:"gif_width,omitempty"`
+	Height              int                   `json:"gif_height,omitempty"`
+	Duration            int                   `json:"gif_duration,omitempty"`
+	Title               string                `json:"title,omitempty"`
+	Caption             string                `json:"caption,omitempty"`
+	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
+}
+
+// InlineQueryResultCachedGIF is an inline query response with cached gif.
+type InlineQueryResultCachedGIF struct {
+	Type                string                `json:"type"`        // required
+	ID                  string                `json:"id"`          // required
+	GifID               string                `json:"gif_file_id"` // required
 	Title               string                `json:"title"`
 	Caption             string                `json:"caption"`
+	ParseMode           string                `json:"parse_mode"`
 	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
 }
@@ -554,6 +709,19 @@ type InlineQueryResultMPEG4GIF struct {
 	ThumbURL            string                `json:"thumb_url"`
 	Title               string                `json:"title"`
 	Caption             string                `json:"caption"`
+	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
+}
+
+// InlineQueryResultCachedMpeg4Gif is an inline query response with cached
+// H.264/MPEG-4 AVC video without sound gif.
+type InlineQueryResultCachedMpeg4Gif struct {
+	Type                string                `json:"type"`          // required
+	ID                  string                `json:"id"`            // required
+	MGifID              string                `json:"mpeg4_file_id"` // required
+	Title               string                `json:"title"`
+	Caption             string                `json:"caption"`
+	ParseMode           string                `json:"parse_mode"`
 	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
 }
@@ -575,6 +743,19 @@ type InlineQueryResultVideo struct {
 	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
 }
 
+// InlineQueryResultCachedVideo is an inline query response with cached video.
+type InlineQueryResultCachedVideo struct {
+	Type                string                `json:"type"`          // required
+	ID                  string                `json:"id"`            // required
+	VideoID             string                `json:"video_file_id"` // required
+	Title               string                `json:"title"`         // required
+	Description         string                `json:"description"`
+	Caption             string                `json:"caption"`
+	ParseMode           string                `json:"parse_mode"`
+	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
+}
+
 // InlineQueryResultAudio is an inline query response audio.
 type InlineQueryResultAudio struct {
 	Type                string                `json:"type"`      // required
@@ -588,6 +769,17 @@ type InlineQueryResultAudio struct {
 	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
 }
 
+// InlineQueryResultCachedAudio is an inline query response with cached audio.
+type InlineQueryResultCachedAudio struct {
+	Type                string                `json:"type"`          // required
+	ID                  string                `json:"id"`            // required
+	AudioID             string                `json:"audio_file_id"` // required
+	Caption             string                `json:"caption"`
+	ParseMode           string                `json:"parse_mode"`
+	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
+}
+
 // InlineQueryResultVoice is an inline query response voice.
 type InlineQueryResultVoice struct {
 	Type                string                `json:"type"`      // required
@@ -596,6 +788,18 @@ type InlineQueryResultVoice struct {
 	Title               string                `json:"title"`     // required
 	Caption             string                `json:"caption"`
 	Duration            int                   `json:"voice_duration"`
+	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
+}
+
+// InlineQueryResultCachedVoice is an inline query response with cached voice.
+type InlineQueryResultCachedVoice struct {
+	Type                string                `json:"type"`          // required
+	ID                  string                `json:"id"`            // required
+	VoiceID             string                `json:"voice_file_id"` // required
+	Title               string                `json:"title"`         // required
+	Caption             string                `json:"caption"`
+	ParseMode           string                `json:"parse_mode"`
 	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
 }
@@ -614,6 +818,19 @@ type InlineQueryResultDocument struct {
 	ThumbURL            string                `json:"thumb_url"`
 	ThumbWidth          int                   `json:"thumb_width"`
 	ThumbHeight         int                   `json:"thumb_height"`
+}
+
+// InlineQueryResultCachedDocument is an inline query response with cached document.
+type InlineQueryResultCachedDocument struct {
+	Type                string                `json:"type"`             // required
+	ID                  string                `json:"id"`               // required
+	DocumentID          string                `json:"document_file_id"` // required
+	Title               string                `json:"title"`            // required
+	Caption             string                `json:"caption"`
+	Description         string                `json:"description"`
+	ParseMode           string                `json:"parse_mode"`
+	ReplyMarkup         *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	InputMessageContent interface{}           `json:"input_message_content,omitempty"`
 }
 
 // InlineQueryResultLocation is an inline query response location.
@@ -635,7 +852,7 @@ type InlineQueryResultGame struct {
 	Type          string                `json:"type"`
 	ID            string                `json:"id"`
 	GameShortName string                `json:"game_short_name"`
-	ReplyMarkup   *InlineKeyboardMarkup `json:"reply_markup"`
+	ReplyMarkup   *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
 }
 
 // ChosenInlineResult is an inline query result chosen by a User
@@ -748,4 +965,15 @@ type PreCheckoutQuery struct {
 	InvoicePayload   string     `json:"invoice_payload"`
 	ShippingOptionID string     `json:"shipping_option_id,omitempty"`
 	OrderInfo        *OrderInfo `json:"order_info,omitempty"`
+}
+
+// Error is an error containing extra information returned by the Telegram API.
+type Error struct {
+	Code    int
+	Message string
+	ResponseParameters
+}
+
+func (e Error) Error() string {
+	return e.Message
 }
