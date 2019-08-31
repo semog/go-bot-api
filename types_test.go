@@ -262,10 +262,10 @@ func TestMessageEntityIsBotCommand(t *testing.T) {
 	}
 }
 
-func TestMessageEntityIsUrl(t *testing.T) {
+func TestMessageEntityIsURL(t *testing.T) {
 	entity := tgbotapi.MessageEntity{Type: "url"}
 
-	if !entity.IsUrl() {
+	if !entity.IsURL() {
 		t.Fail()
 	}
 }

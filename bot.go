@@ -62,8 +62,9 @@ func NewBotAPIWithClient(token string, client *http.Client) (*BotAPI, error) {
 	return bot, nil
 }
 
-func (b *BotAPI) SetAPIEndpoint(apiEndpoint string) {
-	b.apiEndpoint = apiEndpoint
+// SetAPIEndpoint sets the API endpoint
+func (bot *BotAPI) SetAPIEndpoint(apiEndpoint string) {
+	bot.apiEndpoint = apiEndpoint
 }
 
 // MakeRequest makes a request to a specific endpoint with our token.
@@ -83,7 +84,7 @@ func (bot *BotAPI) MakeRequest(endpoint string, params url.Values) (APIResponse,
 	}
 
 	if bot.Debug {
-		log.Printf("%s resp: %s", endpoint, bytes)
+		log.Infof("%s resp: %s", endpoint, bytes)
 	}
 
 	if !apiResp.Ok {
@@ -213,7 +214,7 @@ func (bot *BotAPI) UploadFile(endpoint string, params map[string]string, fieldna
 	}
 
 	if bot.Debug {
-		log.Println(string(bytes))
+		log.Infoln(string(bytes))
 	}
 
 	var apiResp APIResponse
@@ -285,8 +286,8 @@ func (bot *BotAPI) Send(c Chattable) (Message, error) {
 // debug log.
 func (bot *BotAPI) debugLog(context string, v url.Values, message interface{}) {
 	if bot.Debug {
-		log.Printf("%s req : %+v\n", context, v)
-		log.Printf("%s resp: %+v\n", context, message)
+		log.Infof("%s req : %+v\n", context, v)
+		log.Infof("%s resp: %+v\n", context, message)
 	}
 }
 
@@ -495,8 +496,8 @@ func (bot *BotAPI) GetUpdatesChan(config UpdateConfig) (UpdatesChannel, error) {
 
 			updates, err := bot.GetUpdates(config)
 			if err != nil {
-				log.Println(err)
-				log.Println("Failed to get updates, retrying in 3 seconds...")
+				log.Errorln(err)
+				log.Errorln("Failed to get updates, retrying in 3 seconds...")
 				time.Sleep(time.Second * 3)
 
 				continue
@@ -517,7 +518,7 @@ func (bot *BotAPI) GetUpdatesChan(config UpdateConfig) (UpdatesChannel, error) {
 // StopReceivingUpdates stops the go routine which receives updates
 func (bot *BotAPI) StopReceivingUpdates() {
 	if bot.Debug {
-		log.Println("Stopping the update receiver routine...")
+		log.Infoln("Stopping the update receiver routine...")
 	}
 	close(bot.shutdownChannel)
 }

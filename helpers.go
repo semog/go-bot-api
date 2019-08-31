@@ -486,7 +486,7 @@ func NewInlineQueryResultMPEG4GIF(id, url string) InlineQueryResultMPEG4GIF {
 	}
 }
 
-// NewInlineQueryResultCachedPhoto create a new inline query with cached photo.
+// NewInlineQueryResultCachedMPEG4GIF creates a new inline query with cached MPEG4 GIF.
 func NewInlineQueryResultCachedMPEG4GIF(id, MPEG4GifID string) InlineQueryResultCachedMpeg4Gif {
 	return InlineQueryResultCachedMpeg4Gif{
 		Type:   "mpeg4_gif",
@@ -631,7 +631,7 @@ func NewEditMessageCaption(chatID int64, messageID int, caption string) EditMess
 			ChatID:    chatID,
 			MessageID: messageID,
 		},
-		Caption:   caption,
+		Caption: caption,
 	}
 }
 
@@ -644,17 +644,6 @@ func NewEditMessageReplyMarkup(chatID int64, messageID int, replyMarkup InlineKe
 			MessageID:   messageID,
 			ReplyMarkup: &replyMarkup,
 		},
-	}
-}
-
-// NewHideKeyboard hides the keyboard, with the option for being selective
-// or hiding for everyone.
-func NewHideKeyboard(selective bool) ReplyKeyboardHide {
-	log.Println("NewHideKeyboard is deprecated, please use NewRemoveKeyboard")
-
-	return ReplyKeyboardHide{
-		HideKeyboard: true,
-		Selective:    selective,
 	}
 }
 

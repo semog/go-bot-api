@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/semog/telegram-bot-api"
+	tgbotapi "github.com/semog/telegram-bot-api"
 )
 
 const (
@@ -576,7 +576,7 @@ func ExampleNewBotAPI() {
 	}
 }
 
-func ExampleNewWebhook() {
+func ExampleBotAPI_SetWebhook() {
 	bot, err := tgbotapi.NewBotAPI("MyAwesomeBotToken")
 	if err != nil {
 		log.Fatal(err)
@@ -605,7 +605,7 @@ func ExampleNewWebhook() {
 	}
 }
 
-func ExampleAnswerInlineQuery() {
+func ExampleBotAPI_AnswerInlineQuery() {
 	bot, err := tgbotapi.NewBotAPI("MyAwesomeBotToken") // create new bot
 	if err != nil {
 		log.Panic(err)
