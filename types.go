@@ -90,7 +90,7 @@ func (u *User) FullName() string {
 
 // GroupChat is a group chat.
 type GroupChat struct {
-	ID    int    `json:"id"`
+	ID    int64  `json:"id"`
 	Title string `json:"title"`
 }
 
