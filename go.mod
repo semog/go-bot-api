@@ -1,4 +1,4 @@
-module github.com/semog/telegram-bot-api
+module github.com/semog/go-bot-api
 
 go 1.13
 

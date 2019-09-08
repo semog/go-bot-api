@@ -57,7 +57,7 @@ func RunBot(bot *BotAPI, handler BotEventHandlers) {
 	updates, _ := bot.GetUpdatesChan(u)
 
 	defer func() {
-		log.Infof("Shutting down %s", bot.Self.UserName)
+		botlog.Infof("Shutting down %s", bot.Self.UserName)
 		// Must have initialize function in order to call dispose function.
 		if handler.OnInitialize != nil && handler.OnDispose != nil {
 			handler.OnDispose(bot)
@@ -99,7 +99,7 @@ func RunBot(bot *BotAPI, handler BotEventHandlers) {
 			keepgoing = handler.OnPreCheckoutQuery(bot, update.PreCheckoutQuery)
 		default:
 			if bot.Debug {
-				log.Infof("Unhandled Bot Event: %v", update)
+				botlog.Infof("Unhandled Bot Event: %v", update)
 			}
 			keepgoing = true
 		}

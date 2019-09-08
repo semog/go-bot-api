@@ -84,7 +84,7 @@ func (bot *BotAPI) MakeRequest(endpoint string, params url.Values) (APIResponse,
 	}
 
 	if bot.Debug {
-		log.Infof("%s resp: %s", endpoint, bytes)
+		botlog.Infof("%s resp: %s", endpoint, bytes)
 	}
 
 	if !apiResp.Ok {
@@ -214,7 +214,7 @@ func (bot *BotAPI) UploadFile(endpoint string, params map[string]string, fieldna
 	}
 
 	if bot.Debug {
-		log.Infoln(string(bytes))
+		botlog.Infoln(string(bytes))
 	}
 
 	var apiResp APIResponse
@@ -286,8 +286,8 @@ func (bot *BotAPI) Send(c Chattable) (Message, error) {
 // debug log.
 func (bot *BotAPI) debugLog(context string, v url.Values, message interface{}) {
 	if bot.Debug {
-		log.Infof("%s req : %+v\n", context, v)
-		log.Infof("%s resp: %+v\n", context, message)
+		botlog.Infof("%s req : %+v\n", context, v)
+		botlog.Infof("%s resp: %+v\n", context, message)
 	}
 }
 
@@ -496,8 +496,8 @@ func (bot *BotAPI) GetUpdatesChan(config UpdateConfig) (UpdatesChannel, error) {
 
 			updates, err := bot.GetUpdates(config)
 			if err != nil {
-				log.Errorln(err)
-				log.Errorln("Failed to get updates, retrying in 3 seconds...")
+				botlog.Errorln(err)
+				botlog.Errorln("Failed to get updates, retrying in 3 seconds...")
 				time.Sleep(time.Second * 3)
 
 				continue
@@ -518,7 +518,7 @@ func (bot *BotAPI) GetUpdatesChan(config UpdateConfig) (UpdatesChannel, error) {
 // StopReceivingUpdates stops the go routine which receives updates
 func (bot *BotAPI) StopReceivingUpdates() {
 	if bot.Debug {
-		log.Infoln("Stopping the update receiver routine...")
+		botlog.Infoln("Stopping the update receiver routine...")
 	}
 	close(bot.shutdownChannel)
 }

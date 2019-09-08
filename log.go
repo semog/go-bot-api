@@ -19,14 +19,14 @@ type BotLogger interface {
 	Errorf(format string, args ...interface{})
 }
 
-var log = newStdLogAdapter(os.Stderr, "", stdlog.LstdFlags)
+var botlog = newStdLogAdapter(os.Stderr, "", stdlog.LstdFlags)
 
 // SetLogger specifies the logger that the package should use.
 func SetLogger(logger BotLogger) error {
 	if logger == nil {
 		return errors.New("logger is nil")
 	}
-	log = logger
+	botlog = logger
 	return nil
 }
 
