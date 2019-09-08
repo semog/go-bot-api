@@ -1,4 +1,4 @@
-module github.com/semog/go-bot-api
+module github.com/semog/go-bot-api/v4
 
 go 1.13
 
