@@ -3,6 +3,15 @@
 This package is a fork to add minimal new features, and to bring support for the
 latest Telegram Bot API.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/go-telegram-bot-api/telegram-bot-api/v5.svg)](https://pkg.go.dev/github.com/go-telegram-bot-api/telegram-bot-api/v5)
+[![Test](https://github.com/go-telegram-bot-api/telegram-bot-api/actions/workflows/test.yml/badge.svg)](https://github.com/go-telegram-bot-api/telegram-bot-api/actions/workflows/test.yml)
+
+All methods are fairly self-explanatory, and reading the [godoc](https://pkg.go.dev/github.com/go-telegram-bot-api/telegram-bot-api/v5) page should
+explain everything. If something isn't clear, open an issue or submit
+a pull request.
+
+There are more tutorials and high-level information on the website, [go-telegram-bot-api.dev](https://go-telegram-bot-api.dev).
+
 The scope of this project remains close to the original project, but adds
 a simple command dispatching model that makes it easy to get your bot up
 and running quickly without having to implement the same boilerplate code
@@ -15,6 +24,9 @@ you want to ask questions or discuss development. Remember that this is a branch
 from the original development version.
 
 ## Example
+
+First, ensure the library is installed and up to date by running
+`go get -u github.com/semog/telegram-bot-api/v5`.
 
 This sample shows a main() function that connects to the bot,
 and then starts the command listener loop. This is all that is required in the
@@ -31,7 +43,7 @@ package main
 import (
 	"log"
 
-	tg "github.com/semog/telegram-bot-api"
+	tg "github.com/semog/telegram-bot-api/v5"
 )
 
 func main() {
@@ -78,7 +90,7 @@ func mybotOnCommand(bot *tg.BotAPI, cmd string, msg *tg.Message) bool {
 
 func doTextReply(bot *tg.BotAPI, msg *tg.Message) {
 	log.Printf("[%s] %s", msg.From.UserName, msg.Text)
-	replymsg := tgbotapi.NewMessage(msg.Chat.ID, msg.Text)
+	replymsg := tg.NewMessage(msg.Chat.ID, msg.Text)
 	replymsg.ReplyToMessageID = msg.MessageID
 	bot.Send(replymsg)
 }
@@ -101,7 +113,7 @@ package main
 import (
 	"log"
 	"net/http"
-	tg "github.com/semog/telegram-bot-api"
+	tg "github.com/semog/telegram-bot-api/v5"
 )
 
 func main() {
@@ -114,17 +126,22 @@ func main() {
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
 
-	_, err = bot.SetWebhook(tg.NewWebhookWithCert("https://www.google.com:8443/"+bot.Token, "cert.pem"))
+	wh, _ := tg.NewWebhookWithCert("https://www.example.com:8443/"+bot.Token, "cert.pem")
+
+	_, err = bot.Request(wh)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	info, err := bot.GetWebhookInfo()
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	if info.LastErrorDate != 0 {
 		log.Printf("Telegram callback failed: %s", info.LastErrorMessage)
 	}
+
 	updates := bot.ListenForWebhook("/" + bot.Token)
 	go http.ListenAndServeTLS("0.0.0.0:8443", "cert.pem", "key.pem", nil)
 
@@ -134,7 +151,7 @@ func main() {
 }
 ```
 
-If you need, you may generate a self signed certficate, as this requires
+If you need, you may generate a self-signed certificate, as this requires
 HTTPS / TLS. The above example tells Telegram that this is your
 certificate and that it should be trusted, even though it is not
 properly signed.

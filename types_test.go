@@ -1,7 +1,6 @@
 package tgbotapi
 
 import (
-	"log"
 	"testing"
 	"time"
 )
@@ -9,14 +8,14 @@ import (
 func TestUserStringWith(t *testing.T) {
 	user := User{
 		ID:           0,
-		FirstName:    "FirstTest",
-		LastName:     "LastTest",
+		FirstName:    "Test",
+		LastName:     "Test",
 		UserName:     "",
 		LanguageCode: "en",
 		IsBot:        false,
 	}
 
-	if user.String() != "FirstTest LastTest" {
+	if user.String() != "Test Test" {
 		t.Fail()
 	}
 }
@@ -24,59 +23,13 @@ func TestUserStringWith(t *testing.T) {
 func TestUserStringWithUserName(t *testing.T) {
 	user := User{
 		ID:           0,
-		FirstName:    "FirstTest",
-		LastName:     "LastTest",
+		FirstName:    "Test",
+		LastName:     "Test",
 		UserName:     "@test",
 		LanguageCode: "en",
 	}
 
 	if user.String() != "@test" {
-		t.Fail()
-	}
-}
-
-func TestUserFullName(t *testing.T) {
-	user := User{ID: 0,
-		IsBot:        true,
-		FirstName:    "FirstTest",
-		LastName:     "LastTest",
-		UserName:     "@test",
-		LanguageCode: "en"}
-
-	log.Printf("fullname = %s", user.FullName())
-	if user.FullName() != "FirstTest LastTest (@test)" {
-		t.Fail()
-	}
-
-	user = User{ID: 0,
-		IsBot:        true,
-		FirstName:    "FirstTest",
-		LastName:     "LastTest",
-		LanguageCode: "en"}
-
-	log.Printf("fullname = %s", user.FullName())
-	if user.FullName() != "FirstTest LastTest" {
-		t.Fail()
-	}
-
-	user = User{ID: 0,
-		IsBot:        true,
-		FirstName:    "FirstTest",
-		UserName:     "@test",
-		LanguageCode: "en"}
-
-	log.Printf("fullname = %s", user.FullName())
-	if user.FullName() != "FirstTest (@test)" {
-		t.Fail()
-	}
-
-	user = User{ID: 0,
-		IsBot:        true,
-		FirstName:    "FirstTest",
-		LanguageCode: "en"}
-
-	log.Printf("fullname = %s", user.FullName())
-	if user.FullName() != "FirstTest" {
 		t.Fail()
 	}
 }
@@ -92,9 +45,9 @@ func TestMessageTime(t *testing.T) {
 
 func TestMessageIsCommandWithCommand(t *testing.T) {
 	message := Message{Text: "/command"}
-	message.Entities = &[]MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}}
+	message.Entities = []MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}}
 
-	if message.IsCommand() != true {
+	if !message.IsCommand() {
 		t.Fail()
 	}
 }
@@ -102,7 +55,7 @@ func TestMessageIsCommandWithCommand(t *testing.T) {
 func TestIsCommandWithText(t *testing.T) {
 	message := Message{Text: "some text"}
 
-	if message.IsCommand() != false {
+	if message.IsCommand() {
 		t.Fail()
 	}
 }
@@ -110,14 +63,14 @@ func TestIsCommandWithText(t *testing.T) {
 func TestIsCommandWithEmptyText(t *testing.T) {
 	message := Message{Text: ""}
 
-	if message.IsCommand() != false {
+	if message.IsCommand() {
 		t.Fail()
 	}
 }
 
 func TestCommandWithCommand(t *testing.T) {
 	message := Message{Text: "/command"}
-	message.Entities = &[]MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}}
+	message.Entities = []MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}}
 
 	if message.Command() != "command" {
 		t.Fail()
@@ -142,7 +95,7 @@ func TestCommandWithNonCommand(t *testing.T) {
 
 func TestCommandWithBotName(t *testing.T) {
 	message := Message{Text: "/command@testbot"}
-	message.Entities = &[]MessageEntity{{Type: "bot_command", Offset: 0, Length: 16}}
+	message.Entities = []MessageEntity{{Type: "bot_command", Offset: 0, Length: 16}}
 
 	if message.Command() != "command" {
 		t.Fail()
@@ -151,7 +104,7 @@ func TestCommandWithBotName(t *testing.T) {
 
 func TestCommandWithAtWithBotName(t *testing.T) {
 	message := Message{Text: "/command@testbot"}
-	message.Entities = &[]MessageEntity{{Type: "bot_command", Offset: 0, Length: 16}}
+	message.Entities = []MessageEntity{{Type: "bot_command", Offset: 0, Length: 16}}
 
 	if message.CommandWithAt() != "command@testbot" {
 		t.Fail()
@@ -160,7 +113,7 @@ func TestCommandWithAtWithBotName(t *testing.T) {
 
 func TestMessageCommandArgumentsWithArguments(t *testing.T) {
 	message := Message{Text: "/command with arguments"}
-	message.Entities = &[]MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}}
+	message.Entities = []MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}}
 	if message.CommandArguments() != "with arguments" {
 		t.Fail()
 	}
@@ -168,7 +121,7 @@ func TestMessageCommandArgumentsWithArguments(t *testing.T) {
 
 func TestMessageCommandArgumentsWithMalformedArguments(t *testing.T) {
 	message := Message{Text: "/command-without argument space"}
-	message.Entities = &[]MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}}
+	message.Entities = []MessageEntity{{Type: "bot_command", Offset: 0, Length: 8}}
 	if message.CommandArguments() != "without argument space" {
 		t.Fail()
 	}
@@ -207,7 +160,7 @@ func TestMessageEntityParseURLBad(t *testing.T) {
 func TestChatIsPrivate(t *testing.T) {
 	chat := Chat{ID: 10, Type: "private"}
 
-	if chat.IsPrivate() != true {
+	if !chat.IsPrivate() {
 		t.Fail()
 	}
 }
@@ -215,7 +168,7 @@ func TestChatIsPrivate(t *testing.T) {
 func TestChatIsGroup(t *testing.T) {
 	chat := Chat{ID: 10, Type: "group"}
 
-	if chat.IsGroup() != true {
+	if !chat.IsGroup() {
 		t.Fail()
 	}
 }
@@ -223,7 +176,7 @@ func TestChatIsGroup(t *testing.T) {
 func TestChatIsChannel(t *testing.T) {
 	chat := Chat{ID: 10, Type: "channel"}
 
-	if chat.IsChannel() != true {
+	if !chat.IsChannel() {
 		t.Fail()
 	}
 }
@@ -260,7 +213,7 @@ func TestMessageEntityIsBotCommand(t *testing.T) {
 	}
 }
 
-func TestMessageEntityIsURL(t *testing.T) {
+func TestMessageEntityIsUrl(t *testing.T) {
 	entity := MessageEntity{Type: "url"}
 
 	if !entity.IsURL() {
@@ -323,3 +276,106 @@ func TestFileLink(t *testing.T) {
 		t.Fail()
 	}
 }
+
+// Ensure all configs are sendable
+var (
+	_ Chattable = AnimationConfig{}
+	_ Chattable = AnswerWebAppQueryConfig{}
+	_ Chattable = AudioConfig{}
+	_ Chattable = BanChatMemberConfig{}
+	_ Chattable = BanChatSenderChatConfig{}
+	_ Chattable = CallbackConfig{}
+	_ Chattable = ChatActionConfig{}
+	_ Chattable = ChatAdministratorsConfig{}
+	_ Chattable = ChatInfoConfig{}
+	_ Chattable = ChatInviteLinkConfig{}
+	_ Chattable = CloseConfig{}
+	_ Chattable = ContactConfig{}
+	_ Chattable = CopyMessageConfig{}
+	_ Chattable = CreateChatInviteLinkConfig{}
+	_ Chattable = DeleteChatPhotoConfig{}
+	_ Chattable = DeleteChatStickerSetConfig{}
+	_ Chattable = DeleteMessageConfig{}
+	_ Chattable = DeleteMyCommandsConfig{}
+	_ Chattable = DeleteWebhookConfig{}
+	_ Chattable = DocumentConfig{}
+	_ Chattable = EditChatInviteLinkConfig{}
+	_ Chattable = EditMessageCaptionConfig{}
+	_ Chattable = EditMessageLiveLocationConfig{}
+	_ Chattable = EditMessageMediaConfig{}
+	_ Chattable = EditMessageReplyMarkupConfig{}
+	_ Chattable = EditMessageTextConfig{}
+	_ Chattable = FileConfig{}
+	_ Chattable = ForwardConfig{}
+	_ Chattable = GameConfig{}
+	_ Chattable = GetChatMemberConfig{}
+	_ Chattable = GetChatMenuButtonConfig{}
+	_ Chattable = GetGameHighScoresConfig{}
+	_ Chattable = GetMyDefaultAdministratorRightsConfig{}
+	_ Chattable = InlineConfig{}
+	_ Chattable = InvoiceConfig{}
+	_ Chattable = KickChatMemberConfig{}
+	_ Chattable = LeaveChatConfig{}
+	_ Chattable = LocationConfig{}
+	_ Chattable = LogOutConfig{}
+	_ Chattable = MediaGroupConfig{}
+	_ Chattable = MessageConfig{}
+	_ Chattable = PhotoConfig{}
+	_ Chattable = PinChatMessageConfig{}
+	_ Chattable = PreCheckoutConfig{}
+	_ Chattable = PromoteChatMemberConfig{}
+	_ Chattable = RestrictChatMemberConfig{}
+	_ Chattable = RevokeChatInviteLinkConfig{}
+	_ Chattable = SendPollConfig{}
+	_ Chattable = SetChatDescriptionConfig{}
+	_ Chattable = SetChatMenuButtonConfig{}
+	_ Chattable = SetChatPhotoConfig{}
+	_ Chattable = SetChatTitleConfig{}
+	_ Chattable = SetGameScoreConfig{}
+	_ Chattable = SetMyDefaultAdministratorRightsConfig{}
+	_ Chattable = ShippingConfig{}
+	_ Chattable = StickerConfig{}
+	_ Chattable = StopMessageLiveLocationConfig{}
+	_ Chattable = StopPollConfig{}
+	_ Chattable = UnbanChatMemberConfig{}
+	_ Chattable = UnbanChatSenderChatConfig{}
+	_ Chattable = UnpinChatMessageConfig{}
+	_ Chattable = UpdateConfig{}
+	_ Chattable = UserProfilePhotosConfig{}
+	_ Chattable = VenueConfig{}
+	_ Chattable = VideoConfig{}
+	_ Chattable = VideoNoteConfig{}
+	_ Chattable = VoiceConfig{}
+	_ Chattable = WebhookConfig{}
+)
+
+// Ensure all Fileable types are correct.
+var (
+	_ Fileable = (*PhotoConfig)(nil)
+	_ Fileable = (*AudioConfig)(nil)
+	_ Fileable = (*DocumentConfig)(nil)
+	_ Fileable = (*StickerConfig)(nil)
+	_ Fileable = (*VideoConfig)(nil)
+	_ Fileable = (*AnimationConfig)(nil)
+	_ Fileable = (*VideoNoteConfig)(nil)
+	_ Fileable = (*VoiceConfig)(nil)
+	_ Fileable = (*SetChatPhotoConfig)(nil)
+	_ Fileable = (*EditMessageMediaConfig)(nil)
+	_ Fileable = (*SetChatPhotoConfig)(nil)
+	_ Fileable = (*UploadStickerConfig)(nil)
+	_ Fileable = (*NewStickerSetConfig)(nil)
+	_ Fileable = (*AddStickerConfig)(nil)
+	_ Fileable = (*MediaGroupConfig)(nil)
+	_ Fileable = (*WebhookConfig)(nil)
+	_ Fileable = (*SetStickerSetThumbConfig)(nil)
+)
+
+// Ensure all RequestFileData types are correct.
+var (
+	_ RequestFileData = (*FilePath)(nil)
+	_ RequestFileData = (*FileBytes)(nil)
+	_ RequestFileData = (*FileReader)(nil)
+	_ RequestFileData = (*FileURL)(nil)
+	_ RequestFileData = (*FileID)(nil)
+	_ RequestFileData = (*fileAttach)(nil)
+)

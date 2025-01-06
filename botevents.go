@@ -54,10 +54,10 @@ type BotEventHandlers struct {
 func RunBot(bot *BotAPI, handler BotEventHandlers) {
 	u := NewUpdate(0)
 	u.Timeout = 60
-	updates, _ := bot.GetUpdatesChan(u)
+	updates := bot.GetUpdatesChan(u)
 
 	defer func() {
-		botlog.Infof("Shutting down %s", bot.Self.UserName)
+		botlog.Printf("Shutting down %s", bot.Self.UserName)
 		// Must have initialize function in order to call dispose function.
 		if handler.OnInitialize != nil && handler.OnDispose != nil {
 			handler.OnDispose(bot)
@@ -99,7 +99,7 @@ func RunBot(bot *BotAPI, handler BotEventHandlers) {
 			keepgoing = handler.OnPreCheckoutQuery(bot, update.PreCheckoutQuery)
 		default:
 			if bot.Debug {
-				botlog.Infof("Unhandled Bot Event: %v", update)
+				botlog.Printf("Unhandled Bot Event: %v", update)
 			}
 			keepgoing = true
 		}
